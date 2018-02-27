@@ -41,7 +41,7 @@ func handleSelect(sel *sqlparser.Select) (dsl string, esType string, err error) 
 	esType = sqlparser.String(sel.From)
 	esType = strings.Replace(esType, "`", "", -1)
 
-	queryFrom, querySize := "0", "1"
+	queryFrom, querySize := "0", "1000"
 
 	aggFlag := false
 	// if the request is to aggregation
@@ -149,7 +149,7 @@ func handleSelectWhereAndExpr(expr *sqlparser.Expr, topLevel bool, parent *sqlpa
 	if _, ok := (*parent).(*sqlparser.AndExpr); ok {
 		return resultStr, nil
 	}
-	return fmt.Sprintf(`{"bool" : {"must" : [%v]}}`, resultStr), nil
+	return fmt.Sprintf(`{"bool" : {"filter" : [%v]}}`, resultStr), nil
 }
 
 func handleSelectWhereOrExpr(expr *sqlparser.Expr, topLevel bool, parent *sqlparser.Expr) (string, error) {
@@ -234,15 +234,15 @@ func handleSelectWhereComparisonExpr(expr *sqlparser.Expr, topLevel bool, parent
 
 	switch comparisonExpr.Operator {
 	case ">=":
-		resultStr = fmt.Sprintf(`{"range" : {"%v" : {"from" : "%v"}}}`, colNameStr, rightStr)
+		resultStr = fmt.Sprintf(`{"range" : {"%v" : {"gte" : "%v"}}}`, colNameStr, rightStr)
 	case "<=":
-		resultStr = fmt.Sprintf(`{"range" : {"%v" : {"to" : "%v"}}}`, colNameStr, rightStr)
+		resultStr = fmt.Sprintf(`{"range" : {"%v" : {"lte" : "%v"}}}`, colNameStr, rightStr)
 	case "=":
 		// field is missing
 		if missingCheck {
 			resultStr = fmt.Sprintf(`{"missing":{"field":"%v"}}`, colNameStr)
 		} else {
-			resultStr = fmt.Sprintf(`{"match" : {"%v" : {"query" : "%v", "type" : "phrase"}}}`, colNameStr, rightStr)
+			resultStr = fmt.Sprintf(`{"term" : {"%v" : "%v"}}`, colNameStr, rightStr)
 		}
 	case ">":
 		resultStr = fmt.Sprintf(`{"range" : {"%v" : {"gt" : "%v"}}}`, colNameStr, rightStr)
@@ -252,7 +252,7 @@ func handleSelectWhereComparisonExpr(expr *sqlparser.Expr, topLevel bool, parent
 		if missingCheck {
 			resultStr = fmt.Sprintf(`{"bool" : {"must_not" : [{"missing":{"field":"%v"}}]}}`, colNameStr)
 		} else {
-			resultStr = fmt.Sprintf(`{"bool" : {"must_not" : [{"match" : {"%v" : {"query" : "%v", "type" : "phrase"}}}]}}`, colNameStr, rightStr)
+			resultStr = fmt.Sprintf(`{"bool" : {"must_not" : [{"term" : {"%v" : "%v"}}]}}`, colNameStr, rightStr)
 		}
 	case "in":
 		// the default valTuple is ('1', '2', '3') like
@@ -263,10 +263,10 @@ func handleSelectWhereComparisonExpr(expr *sqlparser.Expr, topLevel bool, parent
 		resultStr = fmt.Sprintf(`{"terms" : {"%v" : [%v]}}`, colNameStr, rightStr)
 	case "like":
 		rightStr = strings.Replace(rightStr, `%`, ``, -1)
-		resultStr = fmt.Sprintf(`{"match" : {"%v" : {"query" : "%v", "type" : "phrase"}}}`, colNameStr, rightStr)
+		resultStr = fmt.Sprintf(`{"term" : {"%v" : "%v"}}`, colNameStr, rightStr)
 	case "not like":
 		rightStr = strings.Replace(rightStr, `%`, ``, -1)
-		resultStr = fmt.Sprintf(`{"bool" : {"must_not" : {"match" : {"%v" : {"query" : "%v", "type" : "phrase"}}}}}`, colNameStr, rightStr)
+		resultStr = fmt.Sprintf(`{"bool" : {"must_not" : {"term" : {"%v" : "%v"}}}}`, colNameStr, rightStr)
 	case "not in":
 		// the default valTuple is ('1', '2', '3') like
 		// so need to drop the () and replace ' to "
@@ -278,7 +278,7 @@ func handleSelectWhereComparisonExpr(expr *sqlparser.Expr, topLevel bool, parent
 
 	// the root node need to have bool and must
 	if topLevel {
-		resultStr = fmt.Sprintf(`{"bool" : {"must" : [%v]}}`, resultStr)
+		resultStr = fmt.Sprintf(`{"bool" : {"filter" : [%v]}}`, resultStr)
 	}
 
 	return resultStr, nil
@@ -314,9 +314,9 @@ func handleSelectWhere(expr *sqlparser.Expr, topLevel bool, parent *sqlparser.Ex
 		fromStr := strings.Trim(sqlparser.String(rangeCond.From), `'`)
 		toStr := strings.Trim(sqlparser.String(rangeCond.To), `'`)
 
-		resultStr := fmt.Sprintf(`{"range" : {"%v" : {"from" : "%v", "to" : "%v"}}}`, colNameStr, fromStr, toStr)
+		resultStr := fmt.Sprintf(`{"range" : {"%v" : {"gte" : "%v", "lte" : "%v"}}}`, colNameStr, fromStr, toStr)
 		if topLevel {
-			resultStr = fmt.Sprintf(`{"bool" : {"must" : [%v]}}`, resultStr)
+			resultStr = fmt.Sprintf(`{"bool" : {"filter" : [%v]}}`, resultStr)
 		}
 
 		return resultStr, nil
